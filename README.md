@@ -1,64 +1,62 @@
-# global-top50-pipeline
+# stock-tickers-pipeline
 
-Scheduled pipeline that tracks the price performance of the **50 largest listed companies in the world by market cap** (US and non-US) and stores the history in PostgreSQL.
-
-> Educational project. Not financial advice.
+Pipeline that pulls the list of US-listed tickers from the **Finnhub API**, loads it into **Snowflake**, and serves it through a **Streamlit** dashboard. Scheduled on Windows.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    A[yfinance] --> B[Python ingestion script]
-    B --> C[(PostgreSQL)]
-    D[Scheduler<br/>Task Scheduler / cron] --> B
+    A[Finnhub API] --> B[script.py<br/>extract + load]
+    B --> C[(Snowflake<br/>TICKERS table)]
+    C --> D[app.py<br/>Streamlit dashboard]
+    E[Windows Task Scheduler<br/>run_script.bat] --> B
 ```
 
 ## What it does
 
-- Fetches price data for the top 50 companies by market cap, refreshed **every hour**.
-- Loads it into PostgreSQL so performance can be queried with plain SQL.
-- **TODO:** one line on how the top-50 list is built/updated (fixed list, or derived from market cap?).
+- Fetches ~31k US tickers (symbol, description, type, currency, FIGI, MIC) from Finnhub.
+- Loads them into a Snowflake table with a `LOADED_AT` timestamp.
+- Dashboard: total tickers, last update time, search by symbol/description, breakdown by instrument type.
 
 ## Design decisions
 
-- **Data source: yfinance.** The project started with a free-tier API with a low rate limit, then moved to Finnhub. It ended up on yfinance because the goal is a *true* global top 50, including non-US stocks, rather than a US index like the Dow Jones.
-- **PostgreSQL** as storage, so the data can be modelled and queried with SQL.
-- **Scheduling:** Windows Task Scheduler (`schtasks`) during development.
+- **Finnhub** as source, after moving off an earlier API with a very low rate limit.
+- **Snowflake** as the warehouse.
+- **Secrets in environment variables** (`.env` + `python-dotenv`), never committed.
+- **Windows Task Scheduler** runs `run_script.bat`, which appends output to `log.txt`.
 
-## Data model
+## Repository structure
 
-**TODO:** list the tables and key columns, for example:
-
-| Table | Grain | Key columns |
-|---|---|---|
-| `TODO` | one row per ticker per timestamp | `TODO` |
+```
+script.py          # extract from Finnhub, load into Snowflake
+app.py             # Streamlit dashboard
+run_script.bat     # entry point for the scheduler
+requirements.txt
+.env.example
+```
 
 ## Getting started
 
 ```bash
-git clone https://github.com/ssilvestre95/global-top50-pipeline.git
-cd global-top50-pipeline
+git clone https://github.com/ssilvestre95/stock-tickers-pipeline.git
+cd stock-tickers-pipeline
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env             # fill in your PostgreSQL credentials
-python TODO_main_script.py
-```
-
-### Scheduling (Windows example)
-
-```powershell
-schtasks /create /tn "top50-ingest" /tr "C:\path\to\.venv\Scripts\python.exe C:\path\to\TODO_main_script.py" /sc hourly
+cp .env.example .env             # add your Finnhub key and Snowflake credentials
+python script.py                 # load the data
+streamlit run app.py             # open the dashboard
 ```
 
 ## Limitations
 
-- yfinance is an unofficial wrapper: data can be delayed, incomplete or break without notice.
-- No orchestration, retries or data-quality checks yet.
+- Each run does `DROP TABLE` + `CREATE TABLE` + insert, so **no history is kept**, only the latest snapshot.
+- US exchange only.
+- No retries, tests or data-quality checks yet.
 
 ## Roadmap
 
-- [ ] Add data-quality checks (missing tickers, stale prices)
-- [ ] Add retries and logging
+- [ ] Keep history: append snapshots (or `MERGE`) instead of dropping the table
+- [ ] Add data-quality checks and structured logging
+- [ ] Extend to price data for the world's top 50 companies (including non-US)
 - [ ] Move scheduling to an orchestrator (e.g. Kestra, from the Zoomcamp)
-- [ ] Build SQL views / a simple dashboard for performance vs. 1d / 1w / 1m

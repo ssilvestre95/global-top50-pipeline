@@ -1,2 +1,28 @@
-pythonenv/
+# Secrets
 .env
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+pythonenv/
+.ipynb_checkpoints/
+
+# Data and outputs (keep small samples only if needed)
+*.csv
+*.parquet
+*.db
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
